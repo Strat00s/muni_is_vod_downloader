@@ -27,7 +27,7 @@ def errExit(msg, rc):
 BASE_URL = "https://is.muni.cz/"
 
 ap = argparse.ArgumentParser()
-ap.add_argument("-u", "--url",    required=True, help="url with stream")
+ap.add_argument("-u", "--url",    required=True, help="IS webpage containing stream (VOD)")
 ap.add_argument("--issession",    required=True, help="session cookie")
 ap.add_argument("--iscreds",      required=True, help="credential cookie")
 ap.add_argument("-f", "--ffmpeg", required=True, help="Path to ffmpeg executable")
@@ -44,7 +44,7 @@ page = response.text
 course        = referer.split("/")[-2]
 lecture_title = re.findall(r'<h1\sclass="io-verejne">(.+)<\/h1>', page)[0]
 
-#get encode ky
+#get encode key
 page = page.replace(" ", "")
 encode_key = re.findall(r"\"encode_key\":\".+\"", page)
 if (len(encode_key) < 1):
