@@ -1,12 +1,12 @@
 import re
 import os
+import bs4
 import time
 import m3u8
 import requests
 import argparse
 import subprocess
 from Crypto.Cipher import AES
-from fake_useragent import UserAgent
 
 
 def getRequest(url, sc, cookies, headers):
@@ -41,8 +41,11 @@ ffmpeg_path = args["ffmpeg"]
 #get possible file name
 response = getRequest(referer, 200, cookies, None)
 page = response.text
+soup = bs4.BeautifulSoup(page, "html.parser")
 course        = referer.split("/")[-2]
 lecture_title = re.findall(r'<h1\sclass="io-verejne">(.+)<\/h1>', page)[0]
+lecture_title = re.sub(r"<|>|:|\"|\/|\\|\||\?|\*", " ", lecture_title, 0, re.MULTILINE)
+
 
 #get encode key
 page = page.replace(" ", "")
@@ -51,13 +54,38 @@ if (len(encode_key) < 1):
     errExit("No encode key found. Exiting...", 1)
 encode_key = encode_key[0].replace('"', "").split(":")[1]
 
-#get master uri and data path
-master_uri = re.findall(r"src=\".+\.m3u8\"", page, re.MULTILINE)
-if (len(master_uri) < 1):
-    errExit("No master file found. Exiting...", 1)
-master_uri = master_uri[0].replace("src=", "").replace('"', "")[1:]
-stream_data_path = master_uri[:-11]
 
+#get master uri, stream names and data path
+frames = soup.find_all("div", {"class": "io-element io-ramecek"})
+if len(frames) < 1:
+    errExit("No master file found. Exiting...", 1)
+
+#extract name and uri
+master_list = []
+for frame in frames:
+    name = frame.findChildren("a")[0].text
+    if name == None:
+        continue
+    possible_uri = frame.findChildren("video")[0]
+    if possible_uri["src"] == "":
+        continue
+    master_list.append([name, possible_uri["src"]])
+
+#print and select them
+print(f"Found {len(master_list)} stream(s):")
+i = 0
+for master_file in master_list:
+    i += 1
+    print(f"  {i}: {master_list[i - 1][0]}")
+
+selected = 1
+if i > 1:
+    selected = input(f"Please select stream (1 - {i}): ")
+    while not selected.isdigit() or int(selected) < 1 or int(selected) > i:
+        selected = input("Invalid option. Try again: ")
+
+master_uri = master_list[int(selected) - 1][1]
+stream_data_path = master_uri[:-11]
 
 #get streams from master
 response = getRequest(f"{BASE_URL}{master_uri}", 200, cookies, None)
@@ -113,7 +141,6 @@ print(f"Found {len(segments)} segments")
 i = 0
 with open(f"video.ts", "wb") as f:
     decryptor = AES.new(bytes(decription_key), AES.MODE_CBC)
-    ua        = UserAgent()
     for segment in segments:
         i += 1
         start        = int(segment["byterange"].split("@")[1])
@@ -121,7 +148,7 @@ with open(f"video.ts", "wb") as f:
         ts_uri       = segment["uri"]
         request_time = int(time.time())
         headers = {
-            "user-agent": ua.chrome,
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36",
             "range": f"bytes={start}-{start + length - 1}",
             "referer": referer
         }
@@ -134,7 +161,7 @@ with open(f"video.ts", "wb") as f:
 #convert the ts to mp4 using ffmpeg
 subprocess.run([ffmpeg_path, '-i', 'video.ts', '-c', 'copy', f'{course} - {lecture_title}.mp4'])
 
-if input("Do you want to remove the '.ts' file? (Y/n): ") != "n":
+if input("Do you want to remove the '.ts' file? Type 'n' to keep the file: ") != "n":
     os.remove("video.ts")
 
 print("Done...")
