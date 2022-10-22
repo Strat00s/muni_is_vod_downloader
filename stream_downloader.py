@@ -96,7 +96,7 @@ if stream_cnt < 1:
     errExit("No streams found. Exiting...", 1)
 
 #print and select streams
-print(f"Found {stream_cnt} stream(s):")
+print(f"Found {stream_cnt} source(s):")
 i = 0
 for playlist in playlists:
     i += 1
